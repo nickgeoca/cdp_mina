@@ -11,3 +11,11 @@ coverage
 
 # Never commit keys to Git!
 keys
+
+# vim editor files
+*.sw*
+
+# emacs editor files
+*~
+\#*\#
+.\#*
