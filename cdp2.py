@@ -74,7 +74,7 @@ class UserContract:
         self.col_contract = new_contract
         self.usd_minted = int(old_contract.minaLiquidationPrice / new_contract.minaLiquidationPrice * incoming_deposit_usd_amount) # int for testing
         self.last_update = get_time()
-    def liquidate_and_reset(self):
+    def liquidate_and_reset(self, usd_deposited):
         print('sending MINA to the liquidator. maybe change contract and liquidate the remainder?')
         self.usd_minted = 0
         self.mina_deposited = 0
@@ -103,10 +103,11 @@ fails(lambda: u1.change_usd(1000, 0));                assert u1.usd_minted == 43
 fails(lambda: u1.change_contract(c2, u1.usd_minted)); assert u1.usd_minted == 43 and u1.is_liquidated() == True
 
 print(f'->event, $/mina={1*1.1**1}')
-u1.liquidate_and_reset();                             assert u1.usd_minted == 0 and u1.is_liquidated() == False
+u1.liquidate_and_reset(100);                          assert u1.usd_minted == 0 and u1.is_liquidated() == False
 u1.change_contract(c2, 0)
 u1.change_usd(100, 63);                               assert u1.usd_minted == 63 and u1.is_liquidated() == False
-u1.change_contract(c3, 63)
+u1.change_usd(0, -5);                                 assert u1.usd_minted == 58 and u1.is_liquidated() == False
+u1.change_contract(c3, 58);                           assert u1.usd_minted == 52 and u1.is_liquidated() == False
 
 print(f'->event, $/mina={1*1.1**2}')
-c2.set_liquidated();                                  assert u1.usd_minted == 57 and u1.is_liquidated() == False
+c2.set_liquidated();                                  assert u1.usd_minted == 52 and u1.is_liquidated() == False
