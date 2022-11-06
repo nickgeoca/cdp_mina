@@ -92,22 +92,23 @@ c2  = CollateralContract(1 * 1.1 **  2)
 c3  = CollateralContract(1 * 1.1 **  3)
 u1  = UserContract(c1)
 
-print(f'->event, $/mina={1*1.1**-1}')
+# tests
+print(f'->event, 1 MINA = ${1*1.1**-1}')
 c_2.set_liquidated()
 c_1.set_liquidated()
 u1.change_usd(100, 43);                               assert u1.usd_minted == 43 and u1.is_liquidated() == False
 
-print(f'->event, $/mina={1*1.1**1}')
+print(f'->event, 1 MINA = ${1*1.1**1}')
 c1.set_liquidated();                                  assert u1.usd_minted == 43 and u1.is_liquidated() == True
 fails(lambda: u1.change_usd(1000, 0));                assert u1.usd_minted == 43 and u1.is_liquidated() == True
 fails(lambda: u1.change_contract(c2, u1.usd_minted)); assert u1.usd_minted == 43 and u1.is_liquidated() == True
 
-print(f'->event, $/mina={1*1.1**1}')
+print(f'->event, 1 MINA = ${1*1.1**1}')
 u1.liquidate_and_reset(100);                          assert u1.usd_minted == 0 and u1.is_liquidated() == False
 u1.change_contract(c2, 0)
 u1.change_usd(100, 63);                               assert u1.usd_minted == 63 and u1.is_liquidated() == False
 u1.change_usd(0, -5);                                 assert u1.usd_minted == 58 and u1.is_liquidated() == False
 u1.change_contract(c3, 58);                           assert u1.usd_minted == 52 and u1.is_liquidated() == False
 
-print(f'->event, $/mina={1*1.1**2}')
+print(f'->event, 1 MINA = ${1*1.1**2}')
 c2.set_liquidated();                                  assert u1.usd_minted == 52 and u1.is_liquidated() == False
