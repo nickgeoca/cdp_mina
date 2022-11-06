@@ -50,15 +50,14 @@ class UserContract:
         self.col_contract = col_contract
         self.usd_minted = 0
         self.mina_deposited = 0
-        self.last_update = 0
-    def is_liquidated(self):  return self.col_contract.liquidationTime > self.last_update and self.last_update != 0
+        self.last_update = get_time()
+    def is_liquidated(self):  return self.col_contract.liquidationTime > self.last_update and self.usd_minted != 0
     def change_usd(self, incoming_mina, outgoing_usd):
         assert incoming_mina / self.col_contract.minaLiquidationPrice > outgoing_usd, "not enough MINAs!!! 🤑🤑🤑🤑"
         assert not self.is_liquidated(), "liquidated!!"
 
-        if not self.is_liquidated():
-            self.usd_minted += outgoing_usd
-            self.last_update = get_time()
+        self.usd_minted += outgoing_usd
+        self.last_update = get_time()
         # TODO, send back leftover MINAs
 
     def change_contract(self, new_contract, incoming_deposit_usd_amount):
@@ -78,7 +77,7 @@ class UserContract:
         print('sending MINA to the liquidator. maybe change contract and liquidate the remainder?')
         self.usd_minted = 0
         self.mina_deposited = 0
-        self.last_update = 0        
+        self.last_update = get_time()        
 
 ####################################################################################################
 # EXAMPLE
@@ -91,6 +90,7 @@ c0  = CollateralContract(1 * 1.1 **  0)
 c1  = CollateralContract(1 * 1.1 **  1)
 c2  = CollateralContract(1 * 1.1 **  2)
 c3  = CollateralContract(1 * 1.1 **  3)
+
 u1  = UserContract(c1)
 
 # tests

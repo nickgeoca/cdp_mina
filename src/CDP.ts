@@ -6,85 +6,86 @@ import {
   State,
   method,
   DeployArgs,
-  Permissions,
+  Mina,
 } from 'snarkyjs';
 
-export class CDP extends SmartContract {
-  // reducers
-  collateralEvents = Experimental.Reducer({ actionType: Field });  // type= (PubKey, USD, MINA, TIMESTAMP)
-  liquidationEvents = Experimental.Reducer({ actionType: Field }); // type= (MINA_PRICE, TIMESTAMP)
 
-  // state
-  @state(Field) collateralEventsActionHash = State<Field>();
-  @state(Field) liquidationEventsActionHash = State<Field>();
-
-  // fns
-  @method init() {
-    // for now append this as an initializer
-    // collateralEvents = [(0,0,0,0)]   
-    // liquidationEvents = [(10000000, 0)]  
-   }
-
-  @method collateralize(pubKey: Field, mina: Field) { }
-  @method borrow(pubKey: Field, usd: Field) { }
-  @method liquidate(minaPrice: Field) { }
-  @method user_collateral(pubKey: Field) : [Field, Field] {
-    // get previous counter & actions hash, assert that they're the same as on-chain values
-    let collateralEventsActionHash = this.collateralEventsActionHash.get();
-    this.collateralEventsActionHash.assertEquals(collateralEventsActionHash);
-    let liquidationEventsActionHash = this.liquidationEventsActionHash.get();
-    this.liquidationEventsActionHash.assertEquals(liquidationEventsActionHash);
-    
-    // compute new actions??
-    let pendingCollateralEventsActions = this.collateralEvents.getActions({
-      fromActionHash: collateralEventsActionHash,
-    });
-    let pendingLiquidationEventsActions = this.liquidationEvents.getActions({
-      fromActionHash: liquidationEventsActionHash,
-    });
-
-  
-    // PYTHON
-    // (PubKey, USD, MINA, TIMESTAMP)
-    // fn = lambda x1, x2: x2 if x2[0] == pub_key else x1
-    //  key, colUsd, colMina, colT = functools.reduce(fn, S.collateralEvents)
-    /* TYPESCRIPT
-    let { state: newCounter, actionsHash: newCollateralEventsActionHash } =
-    this.collateralEvents.reduce(
-      pendingCollateralEventsActions,
-      Field,                                // state type
-      (state: Field, _action: Field) => {   // function that says how to apply an action
-        return state.add(1);
-      },
-      { state: REPLACEME, collateralEventsActionHash }
-    );
-    */
-    let x = Field(1);
-    return [x, x];
-
-    /*
-    // minaPrice, liqT = functools.reduce(lambda liq1, liq2: liq2 if newer_lower_liq_ratio(liq2,liq1,colT) else liq1, S.liquidationEvents)
-    let { state: newCounter, actionsHash: newActionsHash } =
-    this.collateralEvents.reduce(
-      pendingCollateralEventsActions,
-      Field,                                // state type
-      (state: Field, _action: Field) => {   // function that says how to apply an action
-        return state.add(1);
-      },
-      { state: REPLACEME, this.collateralEventsActionHash }
-    );
-
-    if (colUsd == 0) {
-        return colMina, colUsd;
-    }
-
-    const liquidated: Bool = minaPrice == 0? false: minaPrice * colMina / colUsd < 1 and liqT > colT;
-    if (liquidated) {
-        return 0, 0;
-    }
-
-    return colMina, colUsd
-
+/*
+TODO
+ - Batch txs
+ - Incewntivize depositing DAI better during liquidaiton
+ - Deposit DAI into liquidation bin to scale better during liquidatin 
+ - Oracle
+ - interest rates?
+ - OBO feature. risk parameters. how to do en-masse
+ - 
+LOW HANGING
+ - (?) chain the LiquidationBin contracts together.. then pass the number of contracts away when switching contracts
 */
-  }  
+
+
+export class LiquidationBin extends SmartContract {
+  @state(Field) liquidationPrice = State<Field>();
+  @state(Field) liquidationTime = State<Field>();
+  @state(Field) unLiquidationTime = State<Field>();
+  @method init(liquidationPrice: Field) { this.liquidationPrice.set(liquidationPrice);                             }
+  @method setLiquidated()               { this.liquidationTime.set(new Field(Mina.getNetworkState().timestamp));   }
+  @method setUnliquidated()             { this.unLiquidationTime.set(new Field(Mina.getNetworkState().timestamp)); }  
+  @method isUnderWater() : boolean      { return this.liquidationTime > this.unLiquidationTime;                    }  
 }
+
+export class UserCollateral extends SmartContract {
+  @state(Field) liqContract = State<Field>();
+  @state(Field) usdMinted = State<Field>();
+  @state(Field) minaDeposited = State<Field>();
+  @state(Field) lastUpdate = State<Field>();
+
+  @method init(liqContract: Field) { this.liqContract.set(liqContract);                              }
+  @method isLiquidated(): boolean { return this.liqContract.liquidationTime > this.lastUpdate && this.usdMinted != 0; }
+  @method changeUsd(incomingMina: Field, outgoingUsd: Field) {
+      // asserts
+      incomingMina.div(this.liqContract.liquidationPrice).assertGt(outgoingUsd);
+      this.isLiquidated().assertEquals(false);
+
+      // state updates
+      this.usdMinted.set(this.usdMinted.add(outgoingUsd));
+      this.lastUpdate.set(Mina.getNetworkState().timestamp);
+      // TODO, send back leftover MINAs
+  }
+  @method changeLiqContract(newLiqContract: Field, depositUsd: Field) { 
+      // asserts
+      this.usdMinted.assertEquals(depositUsd);     // must cover the whole thing
+      this.isLiquidated().assertEquals(false);     // not liquidated
+      this.liqContract.isUnderWater().assertEquals(false) // new contract not under water
+      // todo assert contract byte code is good
+
+      // vars
+      const oldContract: Field = this.liqContract;
+
+      // state
+      this.liqContract.set(newLiqContract);
+      this.usdMinted.set(newLiqContract.minaLiquidationPrice.div(oldContract.minaLiquidationPrice).mul(depositUsd));
+      this.lastUpdate.set(Mina.getNetworkState().timestamp);
+  }
+  @method liquidateAndReset(depositUsd: Field) { 
+      // asserts
+      this.usdMinted.assertEquals(depositUsd);
+
+      // todo send MINA to liquidator
+      this.usdMinted.set(0);
+      this.minaDeposited.set(0);
+      this.lastUpdate.set(Mina.getNetworkState().timestamp);
+  }
+}
+
+// OLD
+/*
+class liquidationEvent extends CircuitValue {
+  @arrayProp(Field, 2) value: Field[];
+
+  constructor(value: number[]) {
+    super();
+    this.value = value.map((value) => Field(value));
+  }
+}
+*/
