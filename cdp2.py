@@ -72,7 +72,7 @@ class UserContract:
 
         # state
         self.col_contract = new_contract
-        self.usd_minted = int(old_contract.minaLiquidationPrice / new_contract.minaLiquidationPrice * incoming_deposit_usd_amount) # int for testing
+        self.usd_minted = int(new_contract.minaLiquidationPrice / old_contract.minaLiquidationPrice * incoming_deposit_usd_amount) # int for testing
         self.last_update = get_time()
     def liquidate_and_reset(self, usd_deposited):
         print('sending MINA to the liquidator. maybe change contract and liquidate the remainder?')
@@ -84,6 +84,7 @@ class UserContract:
 # EXAMPLE
 
 # contracts
+c_3 = CollateralContract(1 * 1.1 ** -3)
 c_2 = CollateralContract(1 * 1.1 ** -2)
 c_1 = CollateralContract(1 * 1.1 ** -1)
 c0  = CollateralContract(1 * 1.1 **  0)
@@ -93,9 +94,9 @@ c3  = CollateralContract(1 * 1.1 **  3)
 u1  = UserContract(c1)
 
 # tests
-print(f'->event, 1 MINA = ${1*1.1**-1}')
-c_2.set_liquidated()
-c_1.set_liquidated()
+print(f'->event, 1 MINA = ${1*1.1**2}')
+c2.set_liquidated()
+c3.set_liquidated()
 u1.change_usd(100, 43);                               assert u1.usd_minted == 43 and u1.is_liquidated() == False
 
 print(f'->event, 1 MINA = ${1*1.1**1}')
@@ -105,10 +106,10 @@ fails(lambda: u1.change_contract(c2, u1.usd_minted)); assert u1.usd_minted == 43
 
 print(f'->event, 1 MINA = ${1*1.1**1}')
 u1.liquidate_and_reset(100);                          assert u1.usd_minted == 0 and u1.is_liquidated() == False
-u1.change_contract(c2, 0)
+u1.change_contract(c_2, 0)
 u1.change_usd(100, 63);                               assert u1.usd_minted == 63 and u1.is_liquidated() == False
 u1.change_usd(0, -5);                                 assert u1.usd_minted == 58 and u1.is_liquidated() == False
-u1.change_contract(c3, 58);                           assert u1.usd_minted == 52 and u1.is_liquidated() == False
 
-print(f'->event, 1 MINA = ${1*1.1**2}')
+print(f'->event, 1 MINA = ${1*1.1**-1}')
+u1.change_contract(c_3, 58);                          assert u1.usd_minted == 52 and u1.is_liquidated() == False
 c2.set_liquidated();                                  assert u1.usd_minted == 52 and u1.is_liquidated() == False
