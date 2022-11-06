@@ -1,4 +1,5 @@
-import { Add, CDP } from './Add';
+import { Add } from './Add';
+import {  CDP } from './CDP';
 import {
   isReady,
   shutdown,
