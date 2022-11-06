@@ -95,7 +95,7 @@ u1  = UserContract(c1)
 print(f'->event, $/mina={1*1.1**-1}')
 c_2.set_liquidated()
 c_1.set_liquidated()
-u1.change_usd(100, 43);                               assert u1.usd_minted == 43
+u1.change_usd(100, 43);                               assert u1.usd_minted == 43 and u1.is_liquidated() == False
 
 print(f'->event, $/mina={1*1.1**1}')
 c1.set_liquidated();                                  assert u1.usd_minted == 43 and u1.is_liquidated() == True
