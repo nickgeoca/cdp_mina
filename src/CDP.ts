@@ -19,7 +19,8 @@ TODO
  - Oracle
  - interest rates?
  - OBO feature. risk parameters. how to do en-masse
- - 
+ - equivilent to buy mina thru liquiation. same thing as buying on a DEX
+ - treat it as a wallet? if the User circuits are in there, then it's good. has liquidateAndReset
 LOW HANGING
  - (?) chain the LiquidationBin contracts together.. then pass the number of contracts away when switching contracts
 */
@@ -46,19 +47,20 @@ export class UserCollateral extends SmartContract {
   @state(Field) minaDeposited = State<Field>();
   @state(Field) lastUpdate = State<Field>();
 
-  @method init(liqContract: PublicKey) { this.liqContract.set(liqContract);                              }
+  @method init(liqContract: PublicKey) { this.liqContract.set(liqContract); }
   @method isLiquidated(): Bool { 
     const lastUpdate = this.lastUpdate.get();
     const usdMinted = this.usdMinted.get();
     const liqContract = new LiquidationBin(this.liqContract.get())
 
-    return Bool(liqContract.liquidationTime > lastUpdate && usdMinted != Field(0)); 
+    return Bool(liqContract.liquidationTime.get() > lastUpdate && usdMinted != Field(0)); 
   }
   @method changeUsd(incomingMina: Field, outgoingUsd: Field) {
     const usdMinted = this.usdMinted.get();
+    const liqContract = new LiquidationBin(this.liqContract.get())
 
     // asserts
-    incomingMina.div(this.liqContract.liquidationPrice).assertGt(outgoingUsd);
+    incomingMina.div(liqContract.liquidationPrice.get()).assertGt(outgoingUsd);
     this.isLiquidated().assertFalse();
 
     // state updates
@@ -66,19 +68,20 @@ export class UserCollateral extends SmartContract {
     this.lastUpdate.set(Mina.getNetworkState().timestamp.value);
     // TODO, send back leftover MINAs
   }
-  @method changeLiqContract(newLiqContract: PublicKey, depositUsd: Field) { 
+  @method changeLiqContract(newLiqContractPubKey: PublicKey, depositUsd: Field) { 
     // vars
-    const oldContract = this.liqContract.get();
+    const oldLiqContract = new LiquidationBin(this.liqContract.get());
+    const newLiqContract = new LiquidationBin(newLiqContractPubKey);
 
     // asserts
     this.usdMinted.assertEquals(depositUsd);     // must cover the whole thing
     this.isLiquidated().assertFalse();     // not liquidated
-    this.liqContract.isUnderWater().assertFalse() // new contract not under water
+    oldLiqContract.isUnderWater().assertFalse() // new contract not under water
     // todo assert contract byte code is good
 
     // state
-    this.liqContract.set(newLiqContract);
-    this.usdMinted.set(newLiqContract.minaLiquidationPrice.div(oldContract.minaLiquidationPrice).mul(depositUsd));
+    this.liqContract.set(newLiqContractPubKey);
+    this.usdMinted.set(newLiqContract.liquidationPrice.get().div(oldLiqContract.liquidationPrice.get()).mul(depositUsd));
     this.lastUpdate.set(Mina.getNetworkState().timestamp.value);
   }
   @method liquidateAndReset(depositUsd: Field) { 
