@@ -1,4 +1,4 @@
 import { Add } from './Add.js';
-import { CDP } from './CDP.js';
+import { LiquidationBin, UserCollateral } from './CDP.js';
 
-export { Add, CDP };
+export { Add, LiquidationBin, UserCollateral };

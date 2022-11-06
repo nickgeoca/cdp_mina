@@ -1,5 +1,5 @@
-import { Add } from './Add';
-import {  CDP } from './CDP';
+import { Add, } from './Add';
+import {  LiquidationBin, UserCollateral } from './CDP';
 import {
   isReady,
   shutdown,
@@ -77,19 +77,37 @@ describe('Add', () => {
   });
 });
 
-async function localDeployCdp(
-  zkAppInstance: Add,
+async function deployLiquidationBin(
+  zkAppAddress: PublicKey,
+  liquidationPrice: Field,
   zkAppPrivatekey: PrivateKey,
   deployerAccount: PrivateKey
 ) {
+  const lbInstance = new LiquidationBin(zkAppAddress);
   const txn = await Mina.transaction(deployerAccount, () => {
     AccountUpdate.fundNewAccount(deployerAccount);
-    zkAppInstance.deploy({ zkappKey: zkAppPrivatekey });
-    zkAppInstance.init();
-    zkAppInstance.sign(zkAppPrivatekey);
+    lbInstance.init(liquidationPrice);
+    lbInstance.sign(zkAppPrivatekey);
   });
   await txn.send().wait();
+  return lbInstance;
+};
+async function deployUserCollateral(
+  zkAppAddress: PublicKey,
+  liqContract: PublicKey,
+  zkAppPrivatekey: PrivateKey,
+  deployerAccount: PrivateKey
+) {
+  const userCollInstance = new UserCollateral(zkAppAddress);
+  const txn = await Mina.transaction(deployerAccount, () => {
+    AccountUpdate.fundNewAccount(deployerAccount);
+    userCollInstance.init(liqContract);
+    userCollInstance.sign(zkAppPrivatekey);
+  });
+  await txn.send().wait();
+  return userCollInstance;
 }
+
 describe('CDP', () => {
   let deployerAccount: PrivateKey,
     zkAppAddress: PublicKey,
@@ -110,22 +128,20 @@ describe('CDP', () => {
   });
 
   it('generates and deploys the `Add` smart contract', async () => {
-    const c_3 = new Add(zkAppAddress); await localDeployCdp(c_3, zkAppPrivateKey, deployerAccount);
-    const c_2 = new Add(zkAppAddress); await localDeployCdp(c_2, zkAppPrivateKey, deployerAccount);
-    const c_1 = new Add(zkAppAddress); await localDeployCdp(c_1, zkAppPrivateKey, deployerAccount);
-    const c0 = new Add(zkAppAddress);  await localDeployCdp(c0, zkAppPrivateKey, deployerAccount);
-    const c1 = new Add(zkAppAddress);  await localDeployCdp(c1, zkAppPrivateKey, deployerAccount);
-    const c2 = new Add(zkAppAddress);  await localDeployCdp(c2, zkAppPrivateKey, deployerAccount);
-    const c3 = new Add(zkAppAddress);  await localDeployCdp(c3, zkAppPrivateKey, deployerAccount);
+    const c_3 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-3), zkAppPrivateKey, deployerAccount);
+    const c_2 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-2), zkAppPrivateKey, deployerAccount);
+    const c_1 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-1), zkAppPrivateKey, deployerAccount);
+    const c0 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-0), zkAppPrivateKey, deployerAccount);
+    const c1 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**1), zkAppPrivateKey, deployerAccount);
+    const c2 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**2), zkAppPrivateKey, deployerAccount);
+    const c3 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**3), zkAppPrivateKey, deployerAccount);
 
-    const u1 = new Add(zkAppAddress);  await localDeployCdp(u1, zkAppPrivateKey, deployerAccount);
-    console.log('blah')
-    /*
-    print(f'->event, 1 MINA = ${1*1.1**2}')
-    c2.set_liquidated()
-    c3.set_liquidated()
-    u1.change_usd(100, 43);                               assert u1.usd_minted == 43 and u1.is_liquidated() == False
-    
+    const u1 = await deployUserCollateral(zkAppAddress, c1.address, zkAppPrivateKey, deployerAccount);
+    console.log('->event, 1 MINA = $${1*1.1**2}')
+    await c2.liquidate();
+    await c2.liquidate()
+    await u1.changeUsd(Field(100), Field(43)); // assert u1.usd_minted == 43 and u1.is_liquidated() == False
+/*    
     print(f'->event, 1 MINA = ${1*1.1**1}')
     c1.set_liquidated();                                  assert u1.usd_minted == 43 and u1.is_liquidated() == True
     fails(lambda: u1.change_usd(1000, 0));                assert u1.usd_minted == 43 and u1.is_liquidated() == True
