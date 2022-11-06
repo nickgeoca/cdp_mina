@@ -1,9 +1,10 @@
 import {
   Field,
   SmartContract,
-  Experimental,
+  PublicKey,
   state,
   State,
+  Bool,
   method,
   DeployArgs,
   Mina,
@@ -28,53 +29,66 @@ export class LiquidationBin extends SmartContract {
   @state(Field) liquidationPrice = State<Field>();
   @state(Field) liquidationTime = State<Field>();
   @state(Field) unLiquidationTime = State<Field>();
-  @method init(liquidationPrice: Field) { this.liquidationPrice.set(liquidationPrice);                             }
-  @method setLiquidated()               { this.liquidationTime.set(new Field(Mina.getNetworkState().timestamp));   }
-  @method setUnliquidated()             { this.unLiquidationTime.set(new Field(Mina.getNetworkState().timestamp)); }  
-  @method isUnderWater() : boolean      { return this.liquidationTime > this.unLiquidationTime;                    }  
+  @method init(liquidationPrice: Field) { this.liquidationPrice.set(liquidationPrice);                        }
+  @method liquidate()                   { this.liquidationTime.set(Mina.getNetworkState().timestamp.value);   }
+  @method unliquidate()                 { this.unLiquidationTime.set(Mina.getNetworkState().timestamp.value); }  
+  @method isUnderWater() : Bool { 
+    const liquidationTime = this.liquidationTime.get();
+    const unLiquidationTime = this.unLiquidationTime.get();
+
+    return Bool(liquidationTime > unLiquidationTime);         
+  }  
 }
 
 export class UserCollateral extends SmartContract {
-  @state(Field) liqContract = State<Field>();
+  @state(Field) liqContract = State<PublicKey>();
   @state(Field) usdMinted = State<Field>();
   @state(Field) minaDeposited = State<Field>();
   @state(Field) lastUpdate = State<Field>();
 
-  @method init(liqContract: Field) { this.liqContract.set(liqContract);                              }
-  @method isLiquidated(): boolean { return this.liqContract.liquidationTime > this.lastUpdate && this.usdMinted != 0; }
-  @method changeUsd(incomingMina: Field, outgoingUsd: Field) {
-      // asserts
-      incomingMina.div(this.liqContract.liquidationPrice).assertGt(outgoingUsd);
-      this.isLiquidated().assertEquals(false);
+  @method init(liqContract: PublicKey) { this.liqContract.set(liqContract);                              }
+  @method isLiquidated(): Bool { 
+    const lastUpdate = this.lastUpdate.get();
+    const usdMinted = this.usdMinted.get();
+    const liqContract = new LiquidationBin(this.liqContract.get())
 
-      // state updates
-      this.usdMinted.set(this.usdMinted.add(outgoingUsd));
-      this.lastUpdate.set(Mina.getNetworkState().timestamp);
-      // TODO, send back leftover MINAs
+    return Bool(liqContract.liquidationTime > lastUpdate && usdMinted != Field(0)); 
   }
-  @method changeLiqContract(newLiqContract: Field, depositUsd: Field) { 
-      // asserts
-      this.usdMinted.assertEquals(depositUsd);     // must cover the whole thing
-      this.isLiquidated().assertEquals(false);     // not liquidated
-      this.liqContract.isUnderWater().assertEquals(false) // new contract not under water
-      // todo assert contract byte code is good
+  @method changeUsd(incomingMina: Field, outgoingUsd: Field) {
+    const usdMinted = this.usdMinted.get();
 
-      // vars
-      const oldContract: Field = this.liqContract;
+    // asserts
+    incomingMina.div(this.liqContract.liquidationPrice).assertGt(outgoingUsd);
+    this.isLiquidated().assertFalse();
 
-      // state
-      this.liqContract.set(newLiqContract);
-      this.usdMinted.set(newLiqContract.minaLiquidationPrice.div(oldContract.minaLiquidationPrice).mul(depositUsd));
-      this.lastUpdate.set(Mina.getNetworkState().timestamp);
+    // state updates
+    this.usdMinted.set(usdMinted.add(outgoingUsd));
+    this.lastUpdate.set(Mina.getNetworkState().timestamp.value);
+    // TODO, send back leftover MINAs
+  }
+  @method changeLiqContract(newLiqContract: PublicKey, depositUsd: Field) { 
+    // vars
+    const oldContract = this.liqContract.get();
+
+    // asserts
+    this.usdMinted.assertEquals(depositUsd);     // must cover the whole thing
+    this.isLiquidated().assertFalse();     // not liquidated
+    this.liqContract.isUnderWater().assertFalse() // new contract not under water
+    // todo assert contract byte code is good
+
+    // state
+    this.liqContract.set(newLiqContract);
+    this.usdMinted.set(newLiqContract.minaLiquidationPrice.div(oldContract.minaLiquidationPrice).mul(depositUsd));
+    this.lastUpdate.set(Mina.getNetworkState().timestamp.value);
   }
   @method liquidateAndReset(depositUsd: Field) { 
-      // asserts
-      this.usdMinted.assertEquals(depositUsd);
+    // asserts
+    this.usdMinted.assertEquals(depositUsd);
 
-      // todo send MINA to liquidator
-      this.usdMinted.set(0);
-      this.minaDeposited.set(0);
-      this.lastUpdate.set(Mina.getNetworkState().timestamp);
+    // todo send MINA to liquidator
+    this.usdMinted.set(Field(0));
+    this.minaDeposited.set(Field(0));
+    this.lastUpdate.set(Mina.getNetworkState().timestamp.value);
   }
 }
 
