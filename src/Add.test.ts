@@ -23,60 +23,6 @@ function createLocalBlockchain() {
   return Local.testAccounts[0].privateKey;
 }
 
-async function localDeploy(
-  zkAppInstance: Add,
-  zkAppPrivatekey: PrivateKey,
-  deployerAccount: PrivateKey
-) {
-  const txn = await Mina.transaction(deployerAccount, () => {
-    AccountUpdate.fundNewAccount(deployerAccount);
-    zkAppInstance.deploy({ zkappKey: zkAppPrivatekey });
-    zkAppInstance.init();
-    zkAppInstance.sign(zkAppPrivatekey);
-  });
-  await txn.send().wait();
-}
-
-describe('Add', () => {
-  let deployerAccount: PrivateKey,
-    zkAppAddress: PublicKey,
-    zkAppPrivateKey: PrivateKey;
-
-  beforeEach(async () => {
-    await isReady;
-    deployerAccount = createLocalBlockchain();
-    zkAppPrivateKey = PrivateKey.random();
-    zkAppAddress = zkAppPrivateKey.toPublicKey();
-  });
-
-  afterAll(async () => {
-    // `shutdown()` internally calls `process.exit()` which will exit the running Jest process early.
-    // Specifying a timeout of 0 is a workaround to defer `shutdown()` until Jest is done running all tests.
-    // This should be fixed with https://github.com/MinaProtocol/mina/issues/10943
-    setTimeout(shutdown, 0);
-  });
-
-  it('generates and deploys the `Add` smart contract', async () => {
-    const zkAppInstance = new Add(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    const num = zkAppInstance.num.get();
-    expect(num).toEqual(Field.one);
-  });
-
-  it('correctly updates the num state on the `Add` smart contract', async () => {
-    const zkAppInstance = new Add(zkAppAddress);
-    await localDeploy(zkAppInstance, zkAppPrivateKey, deployerAccount);
-    const txn = await Mina.transaction(deployerAccount, () => {
-      zkAppInstance.update();
-      zkAppInstance.sign(zkAppPrivateKey);
-    });
-    await txn.send().wait();
-
-    const updatedNum = zkAppInstance.num.get();
-    expect(updatedNum).toEqual(Field(3));
-  });
-});
-
 async function deployLiquidationBin(
   zkAppAddress: PublicKey,
   liquidationPrice: Field,
@@ -91,7 +37,8 @@ async function deployLiquidationBin(
   });
   await txn.send().wait();
   return lbInstance;
-};
+}
+
 async function deployUserCollateral(
   zkAppAddress: PublicKey,
   liqContract: PublicKey,
@@ -127,20 +74,21 @@ describe('CDP', () => {
     setTimeout(shutdown, 0);
   });
 
-  it('generates and deploys the `Add` smart contract', async () => {
-    const c_3 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-3), zkAppPrivateKey, deployerAccount);
-    const c_2 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-2), zkAppPrivateKey, deployerAccount);
-    const c_1 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-1), zkAppPrivateKey, deployerAccount);
-    const c0 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**-0), zkAppPrivateKey, deployerAccount);
-    const c1 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**1), zkAppPrivateKey, deployerAccount);
-    const c2 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**2), zkAppPrivateKey, deployerAccount);
-    const c3 = await deployLiquidationBin(zkAppAddress, Field(1*1.1**3), zkAppPrivateKey, deployerAccount);
+  it('passes CDP test', async () => {
+    const [p_3,p_2,p_1,p0,p1,p2,p3] = [7,8,9,10,11,12,13]
+    const lb_3 = await deployLiquidationBin(zkAppAddress, Field(p_3), zkAppPrivateKey, deployerAccount);
+    const lb_2 = await deployLiquidationBin(zkAppAddress, Field(p_2), zkAppPrivateKey, deployerAccount);
+    const lb_1 = await deployLiquidationBin(zkAppAddress, Field(p_1), zkAppPrivateKey, deployerAccount);
+    const lb0 = await deployLiquidationBin(zkAppAddress, Field(p0), zkAppPrivateKey, deployerAccount);
+    const lb1 = await deployLiquidationBin(zkAppAddress, Field(p1), zkAppPrivateKey, deployerAccount);
+    const lb2 = await deployLiquidationBin(zkAppAddress, Field(p2), zkAppPrivateKey, deployerAccount);
+    const lb3 = await deployLiquidationBin(zkAppAddress, Field(p3), zkAppPrivateKey, deployerAccount);
 
-    const u1 = await deployUserCollateral(zkAppAddress, c1.address, zkAppPrivateKey, deployerAccount);
+    const u1 = await deployUserCollateral(zkAppAddress, lb1.address, zkAppPrivateKey, deployerAccount);
     console.log('->event, 1 MINA = $${1*1.1**2}')
-    await c2.liquidate();
-    await c2.liquidate()
-    await u1.changeUsd(Field(100), Field(43)); // assert u1.usd_minted == 43 and u1.is_liquidated() == False
+    lb3.liquidate();
+    lb2.liquidate()
+    u1.changeUsd(Field(100), Field(43)); // assert u1.usd_minted == 43 and u1.is_liquidated() == False
 /*    
     print(f'->event, 1 MINA = ${1*1.1**1}')
     c1.set_liquidated();                                  assert u1.usd_minted == 43 and u1.is_liquidated() == True
